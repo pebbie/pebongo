@@ -72,7 +72,7 @@ type
     function ReadDocument: TBSONDocument; virtual;
     function ReadItem( idx: integer ): TBSONItem; virtual;
   public
-    constructor Create;
+    constructor Create( etype: byte = BSON_NULL );
 
     procedure WriteStream( F: TStream ); virtual;
     procedure ReadStream( F: TStream ); virtual;
@@ -135,6 +135,7 @@ type
   end;
 
   TBSONStringItem = class( TBSONItem )
+  protected
     FData: string;
 
     procedure WriteString( AValue: string ); override;
@@ -147,6 +148,11 @@ type
   end;
 
   TBSONJSItem = class( TBSONStringItem )
+  public
+    constructor Create( AValue: string = '' );
+  end;
+
+  TBSONSymbolItem = class( TBSONStringItem )
   public
     constructor Create( AValue: string = '' );
   end;
@@ -207,6 +213,60 @@ type
     procedure WriteStream( F: TStream ); override;
   end;
 
+  TBSONBinaryItem = class( TBSONItem )
+    FLen: integer;
+    FSubtype: byte;
+    FData: Pointer;
+  public
+    constructor Create;
+    destructor Free;
+
+    procedure ReadStream( F: TStream ); override;
+    procedure WriteStream( F: TStream ); override;
+  end;
+
+  TBSONObjectIDItem = class( TBSONItem )
+    FData: TBSONObjectID;
+
+    procedure WriteOID( AValue: TBSONObjectID ); override;
+    function ReadOID: TBSONObjectID; override;
+  public
+    constructor Create( AValue: string = '000000000000' );
+
+    procedure ReadStream( F: TStream ); override;
+    procedure WriteStream( F: TStream ); override;
+  end;
+
+  TBSONDBRefItem = class( TBSONStringItem )
+    FData: array[0..11] of byte;
+  public
+    constructor Create( AValue: string = ''; AData: string = '' );
+
+    procedure ReadStream( F: TStream ); override;
+    procedure WriteStream( F: TStream ); override;
+  end;
+
+  TBSONRegExItem = class( TBSONItem )
+    FPattern, FOptions: string;
+  public
+    constructor Create( APattern: string = ''; AOptions: string = '' );
+
+    procedure ReadStream( F: TStream ); override;
+    procedure WriteStream( F: TStream ); override;
+  end;
+
+  TBSONScopedJSItem = class( TBSONItem )
+    FLen: integer;
+    FCode: string;
+    FScope: TBSONDocument;
+  public
+    constructor Create;
+    destructor Free;
+
+    procedure ReadStream( F: TStream ); override;
+    procedure WriteStream( F: TStream ); override;
+  end;
+
 implementation
 
 uses
@@ -216,7 +276,7 @@ const
   nullterm          : char = #0;
 
 var
-  buf               : array[0..1023] of char;
+  buf               : array[0..65535] of char;
   nullitem          : TBSONItem;
 
 function _ReadString( F: TStream ): string;
@@ -313,6 +373,8 @@ begin
     SetLength( FItems, length( FItems ) + 1 );
     case elmtype of
       BSON_ARRAY: FItems[high( FItems )] := TBSONArrayItem.Create;
+      BSON_BINARY: FItems[high( FItems )] := TBSONBinaryItem.Create;
+      BSON_DBPTR: FItems[high( FItems )] := TBSONDBRefItem.Create;
       BSON_FLOAT: FItems[high( FItems )] := TBSONDoubleItem.Create;
       BSON_INT32: FItems[high( FItems )] := TBSONIntItem.Create;
       BSON_INT64: FItems[high( FItems )] := TBSONInt64Item.Create;
@@ -320,6 +382,12 @@ begin
       BSON_STRING: FItems[high( FItems )] := TBSONStringItem.Create;
       BSON_DOC: FItems[high( FItems )] := TBSONDocumentItem.Create;
       BSON_JS: FItems[high( FItems )] := TBSONJSItem.Create;
+      BSON_JSSCOPE: FItems[high( FItems )] := TBSONScopedJSItem.Create;
+      BSON_OBJECTID: FItems[high( FItems )] := TBSONObjectIDItem.Create;
+      BSON_MINKEY: FItems[high( FItems )] := TBSONItem.Create( BSON_MINKEY );
+      BSON_MAXKEY: FItems[high( FItems )] := TBSONItem.Create( BSON_MAXKEY );
+      BSON_REGEX: FItems[high( FItems )] := TBSONRegExItem.Create;
+      BSON_SYMBOL: FItems[high( FItems )] := TBSONSymbolItem.Create;
     else
       raise EBSONException.Create( 'unimplemented element handler ' + inttostr( elmtype ) );
     end;
@@ -335,7 +403,7 @@ procedure TBSONDocument.SaveToFile( filename: string );
 var
   f                 : TFileStream;
 begin
-  f := TFileStream.Create( filename, fmOpenWrite );//FileCreate( filename ) );
+  f := TFileStream.Create( filename, fmOpenWrite ); //FileCreate( filename ) );
   WriteStream( f );
   f.Free;
 end;
@@ -554,10 +622,10 @@ end;
 
 { TBSONItem }
 
-constructor TBSONItem.Create;
+constructor TBSONItem.Create( etype: byte );
 begin
   fnull := true;
-  eltype := BSON_NULL;
+  eltype := etype;
 end;
 
 function TBSONItem.IsNull: boolean;
@@ -597,7 +665,7 @@ end;
 
 function TBSONItem.ReadOID: TBSONObjectID;
 begin
-	Result := Result;
+  Result := Result;
 end;
 
 procedure TBSONItem.ReadStream( F: TStream );
@@ -750,6 +818,173 @@ constructor TBSONJSItem.Create( AValue: string );
 begin
   inherited Create( AValue );
   eltype := BSON_JS;
+end;
+
+{ TBSONObjectIDItem }
+
+constructor TBSONObjectIDItem.Create( AValue: string );
+var
+  i                 : integer;
+begin
+  eltype := BSON_OBJECTID;
+  if length( AValue ) = 12 then
+    for i := 0 to 11 do
+      FData[i] := StrToInt( AValue[i + 1] );
+end;
+
+function TBSONObjectIDItem.ReadOID: TBSONObjectID;
+begin
+  Result := FData;
+end;
+
+procedure TBSONObjectIDItem.ReadStream( F: TStream );
+begin
+  f.Read( FData[0], 12 );
+end;
+
+procedure TBSONObjectIDItem.WriteOID( AValue: TBSONObjectID );
+begin
+  FData := AValue;
+end;
+
+procedure TBSONObjectIDItem.WriteStream( F: TStream );
+begin
+  f.Write( eltype, sizeof( byte ) );
+  f.Write( elname[1], length( elname ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  f.Write( FData[0], 12 );
+end;
+
+{ TBSONRegExItem }
+
+constructor TBSONRegExItem.Create( APattern, AOptions: string );
+begin
+  FPattern := APattern;
+  FOptions := AOptions;
+  eltype := BSON_REGEX;
+end;
+
+procedure TBSONRegExItem.ReadStream( F: TStream );
+begin
+  FPattern := _ReadString( f );
+  FOptions := _ReadString( f );
+end;
+
+procedure TBSONRegExItem.WriteStream( F: TStream );
+begin
+  f.Write( eltype, sizeof( byte ) );
+  f.Write( elname[1], length( elname ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  f.Write( FPattern[1], length( FPattern ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  f.Write( FOptions[1], length( FOptions ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+end;
+
+{ TBSONBinaryItem }
+
+constructor TBSONBinaryItem.Create;
+begin
+  FLen := 0;
+  FData := nil;
+  FSubtype := BSON_SUBTYPE_USER;
+  eltype := BSON_BINARY;
+end;
+
+destructor TBSONBinaryItem.Free;
+begin
+  if FLen <> 0 then begin
+    FreeMem( FData );
+  end;
+end;
+
+procedure TBSONBinaryItem.ReadStream( F: TStream );
+begin
+  f.Read( FLen, sizeof( integer ) );
+  f.Read( FSubtype, sizeof( byte ) );
+  GetMem( FData, FLen );
+  f.Read( FData, Flen );
+end;
+
+procedure TBSONBinaryItem.WriteStream( F: TStream );
+begin
+  f.Write( eltype, sizeof( byte ) );
+  f.Write( elname[1], length( elname ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  f.Write( FLen, sizeof( integer ) );
+  f.Write( FSubtype, sizeof( byte ) );
+  f.Write( FData, FLen );
+end;
+
+{ TBSONScopedJSItem }
+
+constructor TBSONScopedJSItem.Create;
+begin
+  eltype := BSON_JSSCOPE;
+  FScope := TBSONDocument.Create;
+end;
+
+destructor TBSONScopedJSItem.Free;
+begin
+  FScope.Free;
+end;
+
+procedure TBSONScopedJSItem.ReadStream( F: TStream );
+begin
+  f.Read( Flen, sizeof( integer ) );
+  FCode := _ReadString( f );
+  FScope.ReadStream( f );
+end;
+
+procedure TBSONScopedJSItem.WriteStream( F: TStream );
+var
+  startpos, lastpos : integer;
+begin
+  f.Write( eltype, sizeof( byte ) );
+  f.Write( elname[1], length( elname ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  startpos := f.Position;
+  f.Write( FLen, sizeof( integer ) );
+  f.Write( FCode[1], length( FCode ) );
+  f.Write( nullterm, sizeof( nullterm ) );
+  FScope.WriteStream( f );
+  lastpos := F.Position;
+  FLen := lastpos - startpos;
+  f.Seek( startpos, soFromBeginning );
+  f.Write( FLen, sizeof( integer ) );
+  f.Seek( lastpos, soFromBeginning );
+end;
+
+{ TBSONSymbolItem }
+
+constructor TBSONSymbolItem.Create( AValue: string );
+begin
+  eltype := BSON_SYMBOL;
+end;
+
+{ TBSONDBRefItem }
+
+constructor TBSONDBRefItem.Create( AValue, AData: string );
+var
+  i                 : integer;
+begin
+  inherited Create( AValue );
+  eltype := BSON_DBPTR;
+  if length( AData ) = 12 then
+    for i := 0 to 11 do
+      FData[i] := StrToInt( AData[1 + i] );
+end;
+
+procedure TBSONDBRefItem.ReadStream( F: TStream );
+begin
+  inherited;
+  f.Read( FData[0], 12 );
+end;
+
+procedure TBSONDBRefItem.WriteStream( F: TStream );
+begin
+  inherited;
+  f.Write( FData[0], 12 );
 end;
 
 initialization
