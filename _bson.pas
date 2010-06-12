@@ -335,7 +335,7 @@ procedure TBSONDocument.SaveToFile( filename: string );
 var
   f                 : TFileStream;
 begin
-  f := TFileStream.Create( FileCreate( filename ) );
+  f := TFileStream.Create( filename, fmOpenWrite );//FileCreate( filename ) );
   WriteStream( f );
   f.Free;
 end;
@@ -367,6 +367,7 @@ var
   i                 : integer;
 begin
   startpos := F.Position;
+  dummy := 0;
   f.write( dummy, sizeof( dummy ) );
   for i := 0 to high( FItems ) do begin
     FItems[i].WriteStream( f );
@@ -596,7 +597,7 @@ end;
 
 function TBSONItem.ReadOID: TBSONObjectID;
 begin
-
+	Result := Result;
 end;
 
 procedure TBSONItem.ReadStream( F: TStream );
