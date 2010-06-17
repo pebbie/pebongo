@@ -46,6 +46,9 @@ const
   BSON_BOOL_FALSE   = $00;
   BSON_BOOL_TRUE    = $01;
 
+const
+  nullterm          : char = #0;
+
 type
   EBSONException = class( Exception );
   TBSONObjectID = array[0..11] of byte;
@@ -80,6 +83,7 @@ type
     procedure ReadStream( F: TStream ); virtual;
 
     function GetSize: longint; virtual;
+    function ToString: string; virtual;
 
     function IsNull: boolean;
     property AsInteger: integer read ReadInteger write WriteInteger;
@@ -111,6 +115,8 @@ type
     function IndexOf( name: string ): integer;
     function GetSize: longint;
 
+    function ToString: string;
+
     property Items[idx: integer]: TBSONItem read GetItem;
     property Values[Name: string]: TBSONItem read GetValue write SetValue;
     property Count: integer read GetCount;
@@ -125,6 +131,8 @@ type
     constructor Create( AValue: real = 0.0 );
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -137,6 +145,8 @@ type
   public
     constructor Create( AValue: integer = 0 );
     function GetSize: longint; override;
+
+    function ToString: string; override;
 
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
@@ -151,6 +161,8 @@ type
   public
     constructor Create( AValue: string = '' );
     function GetSize: longint; override;
+
+    function ToString: string; override;
 
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
@@ -175,6 +187,8 @@ type
     constructor Create( AValue: Int64 = 0 );
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -188,6 +202,8 @@ type
     constructor Create( AValue: Boolean = false );
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -198,6 +214,8 @@ type
     constructor Create;
     destructor Free;
     function GetSize: longint; override;
+
+    function ToString: string; override;
 
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
@@ -213,6 +231,8 @@ type
     destructor Free;
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -222,6 +242,8 @@ type
   public
     constructor Create( AValue: TDateTime );
     function GetSize: longint; override;
+
+    function ToString: string; override;
 
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
@@ -236,6 +258,8 @@ type
     destructor Free;
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -249,6 +273,8 @@ type
     constructor Create( AValue: string = '000000000000' );
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -259,6 +285,8 @@ type
     constructor Create( AValue: string = ''; AData: string = '' );
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -268,6 +296,8 @@ type
   public
     constructor Create( APattern: string = ''; AOptions: string = '' );
     function GetSize: longint; override;
+
+    function ToString: string; override;
 
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
@@ -282,6 +312,8 @@ type
     destructor Free;
     function GetSize: longint; override;
 
+    function ToString: string; override;
+
     procedure ReadStream( F: TStream ); override;
     procedure WriteStream( F: TStream ); override;
   end;
@@ -292,9 +324,6 @@ implementation
 
 uses
   DateUtils;
-
-const
-  nullterm          : char = #0;
 
 var
   buf               : array[0..65535] of char;
@@ -463,6 +492,18 @@ begin
   end;
 end;
 
+function TBSONDocument.ToString: string;
+var
+  i                 : integer;
+begin
+  Result := '{';
+  for i := 0 to high( FItems ) do begin
+    Result := Result + FItems[i].ToString;
+    if i < High( FItems ) then Result := Result + ', ';
+  end;
+  Result := Result + '}';
+end;
+
 procedure TBSONDocument.WriteStream( F: TStream );
 var
   dummy             : integer;
@@ -499,6 +540,11 @@ begin
   f.Read( FData, sizeof( FData ) );
 end;
 
+function TBSONDoubleItem.ToString: string;
+begin
+  Result := format( '"%s" : %f', [elname, FData] );
+end;
+
 procedure TBSONDoubleItem.WriteDouble( AValue: real );
 begin
   FData := AValue;
@@ -533,6 +579,11 @@ end;
 procedure TBSONIntItem.ReadStream( F: TStream );
 begin
   f.Read( fdata, sizeof( integer ) );
+end;
+
+function TBSONIntItem.ToString: string;
+begin
+  Result := format( '"%s" : %d', [elname, FData] );
 end;
 
 procedure TBSONIntItem.WriteInteger( AValue: integer );
@@ -572,6 +623,11 @@ end;
 function TBSONStringItem.ReadString: string;
 begin
   Result := FData;
+end;
+
+function TBSONStringItem.ToString: string;
+begin
+  Result := format( '"%s" : "%s"', [elname, FData] );
 end;
 
 procedure TBSONStringItem.WriteStream( F: TStream );
@@ -615,6 +671,11 @@ begin
   f.Read( FData, sizeof( FData ) );
 end;
 
+function TBSONInt64Item.ToString: string;
+begin
+  Result := format( '"%s" : %d', [elname, FData] );
+end;
+
 procedure TBSONInt64Item.WriteInt64( AValue: int64 );
 begin
   FData := AValue;
@@ -652,6 +713,11 @@ var
 begin
   f.Read( b, sizeof( byte ) );
   FData := b = BSON_BOOL_TRUE
+end;
+
+function TBSONBooleanItem.ToString: string;
+begin
+  Result := format( '"%s" : %s', [elname, BoolToStr( FData, true )] );
 end;
 
 procedure TBSONBooleanItem.WriteBoolean( AValue: Boolean );
@@ -738,6 +804,11 @@ begin
   Result := '';
 end;
 
+function TBSONItem.ToString: string;
+begin
+  Result := elname + ' : null';
+end;
+
 procedure TBSONItem.WriteBoolean( Value: Boolean );
 begin
 
@@ -810,6 +881,11 @@ begin
   FData.ReadStream( f );
 end;
 
+function TBSONDocumentItem.ToString: string;
+begin
+  Result := format( '"%s" : %s', [elname, FData.ToString] );
+end;
+
 procedure TBSONDocumentItem.WriteStream( F: TStream );
 begin
   f.Write( eltype, sizeof( byte ) );
@@ -846,6 +922,20 @@ begin
   FData.ReadStream( F );
 end;
 
+function TBSONArrayItem.ToString: string;
+var
+  i                 : integer;
+  tmp, t2           : string;
+begin
+  tmp := '';
+  for i := 0 to FData.Count - 1 do begin
+    t2 := FData.Items[i].ToString;
+    tmp := tmp + Copy( t2, Pos( ':', t2 ) + 1, length( t2 ) );
+    if i < FData.Count - 1 then tmp := tmp + ', ';
+  end;
+  Result := format( '"%s" : [%s]', [elname, tmp] );
+end;
+
 procedure TBSONArrayItem.WriteItem( idx: integer; item: TBSONItem );
 begin
   inherited;
@@ -879,6 +969,11 @@ var
 begin
   f.Read( data, sizeof( int64 ) );
   FData := UnixToDateTime( data );
+end;
+
+function TBSONDatetimeItem.ToString: string;
+begin
+  Result := format( '"%s" : %s', [elname, DateTimeToStr( FData )] );
 end;
 
 procedure TBSONDatetimeItem.WriteStream( F: TStream );
@@ -927,6 +1022,24 @@ begin
   f.Read( FData[0], 12 );
 end;
 
+function TBSONObjectIDItem.ToString: string;
+begin
+  Result := format( '"%s" : ObjectID("%s%s%s%s%s%s%s%s%s%s%s%s")', [elname,
+    IntToHex( FData[0], 2 ),
+      IntToHex( FData[1], 2 ),
+      IntToHex( FData[2], 2 ),
+      IntToHex( FData[3], 2 ),
+      IntToHex( FData[4], 2 ),
+      IntToHex( FData[5], 2 ),
+      IntToHex( FData[6], 2 ),
+      IntToHex( FData[7], 2 ),
+      IntToHex( FData[8], 2 ),
+      IntToHex( FData[9], 2 ),
+      IntToHex( FData[10], 2 ),
+      IntToHex( FData[11], 2 )
+      ] );
+end;
+
 procedure TBSONObjectIDItem.WriteOID( AValue: TBSONObjectID );
 begin
   FData := AValue;
@@ -958,6 +1071,11 @@ procedure TBSONRegExItem.ReadStream( F: TStream );
 begin
   FPattern := _ReadString( f );
   FOptions := _ReadString( f );
+end;
+
+function TBSONRegExItem.ToString: string;
+begin
+  Result := format( '"%s" : "%s" "%s"', [elname, FPattern, FOptions] );
 end;
 
 procedure TBSONRegExItem.WriteStream( F: TStream );
@@ -1001,6 +1119,11 @@ begin
   f.Read( FData, Flen );
 end;
 
+function TBSONBinaryItem.ToString: string;
+begin
+  Result := format( '"%s" : %s', [elname, 'Binary'] );
+end;
+
 procedure TBSONBinaryItem.WriteStream( F: TStream );
 begin
   f.Write( eltype, sizeof( byte ) );
@@ -1034,6 +1157,11 @@ begin
   f.Read( Flen, sizeof( integer ) );
   FCode := _ReadString( f );
   FScope.ReadStream( f );
+end;
+
+function TBSONScopedJSItem.ToString: string;
+begin
+  Result := format( '"%s" : "%s" %s', [elname, FCode, FScope.ToString] );
 end;
 
 procedure TBSONScopedJSItem.WriteStream( F: TStream );
@@ -1077,6 +1205,24 @@ procedure TBSONDBRefItem.ReadStream( F: TStream );
 begin
   inherited;
   f.Read( FData[0], 12 );
+end;
+
+function TBSONDBRefItem.ToString: string;
+begin
+  Result := format( '"%s" : DBRef("%s%s%s%s%s%s%s%s%s%s%s%s")', [elname,
+    IntToHex( FData[0], 2 ),
+      IntToHex( FData[1], 2 ),
+      IntToHex( FData[2], 2 ),
+      IntToHex( FData[3], 2 ),
+      IntToHex( FData[4], 2 ),
+      IntToHex( FData[5], 2 ),
+      IntToHex( FData[6], 2 ),
+      IntToHex( FData[7], 2 ),
+      IntToHex( FData[8], 2 ),
+      IntToHex( FData[9], 2 ),
+      IntToHex( FData[10], 2 ),
+      IntToHex( FData[11], 2 )
+      ] );
 end;
 
 procedure TBSONDBRefItem.WriteStream( F: TStream );
