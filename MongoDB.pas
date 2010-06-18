@@ -1,4 +1,4 @@
-unit Mongo;
+unit MongoDB;
 {$IFDEF FPC}
 {$MODE DELPHI}
 {$ENDIF}
@@ -21,11 +21,11 @@ type
     FConnected: Boolean;
     FDB: string;
   public
-    constructor Create( host: string = 'localhost'; port: string = '27017' );
+    constructor Create( host: string = 'localhost'; port: string = '27017'; db: string = '' );
     destructor Free;
 
     function GetCollection( collName: string ): TMongoCollection;
-    procedure SelectDatabase( db: string );
+    procedure GetDatabase( db: string );
 
     property Socket: TTCPBlockSocket read FSocket;
     property Connected: Boolean read FConnected;
@@ -56,6 +56,9 @@ type
     function find( query: TBSONDocument = nil; fields: TBSONDocument = nil ): TMongoCursor;
     function find_one( query: TBSONDocument = nil; fields: TBSONDocument = nil ): TMongoCursor;
 
+    procedure save( doc: TBSONDocument );
+    procedure remove( sel: TBSONDocument; IsSingle: Boolean = false );
+
     property DBName: string read FDatabase write FDatabase;
     property Name: string read FCollection write FCollection;
   end;
@@ -68,8 +71,10 @@ type
     opcode: integer;
   end;
 
+{
 procedure mongo_query( conn: TMongoConnection; db, collection: string; nToSkip, nToReturn: integer; query: TBSONDocument = nil; fields: TBSONDocument = nil; options: integer = 0 );
-
+procedure mongo_insert( conn: TMongoConnection; db, collection: string; doc: TBSONDocument );
+}
 implementation
 
 uses
@@ -123,9 +128,76 @@ begin
   end;
 end;
 
+procedure mongo_insert( conn: TMongoConnection; db, collection: string; doc: TBSONDocument );
+var
+  hdr               : TMongoMsgHeader;
+  dbfull            : string;
+  ms                : TMemoryStream;
+  options           : integer;
+begin
+  if not conn.Connected then exit;
+  dbfull := format( '%s.%s', [db, collection] );
+  hdr.length := sizeof( hdr ) + 5 + length( dbfull ) + doc.GetSize;
+  hdr.requestID := 123456;
+  hdr.opcode := OP_INSERT;
+  ms := TMemoryStream.Create;
+  ms.Write( hdr, sizeof( hdr ) );
+  options := 0;
+  ms.Write( options, sizeof( integer ) );
+  ms.Write( dbfull[1], length( dbfull ) );
+  ms.Write( nullterm, sizeof( char ) );
+  doc.WriteStream( ms );
+  ms.Seek( 0, soFromBeginning );
+  conn.Socket.SendStreamRaw( ms );
+  ms.Free;
+end;
+
+procedure mongo_message( conn: TMongoConnection; msg: string );
+var
+  hdr               : TMongoMsgHeader;
+  ms                : TMemoryStream;
+begin
+  hdr.length := sizeof( hdr ) + 1 + length( msg );
+  hdr.requestID := 123456;
+  hdr.opcode := OP_MESSAGE;
+  ms := TmemoryStream.Create;
+  ms.Write( hdr, sizeof( hdr ) );
+  ms.Write( msg[1], length( msg ) );
+  ms.Write( nullterm, sizeof( char ) );
+  ms.Seek( 0, soFromBeginning );
+  conn.Socket.SendStreamRaw( ms );
+  ms.Free;
+end;
+
+procedure mongo_delete( conn: TMongoConnection; db, collection: string; sel: TBSONDocument; IsSingle: Boolean = False );
+var
+  hdr               : TMongoMsgHeader;
+  ms                : TMemoryStream;
+  flag              : integer;
+  dbfull            : string;
+begin
+  if not conn.Connected then exit;
+  dbfull := format( '%s.%s', [db, collection] );
+  hdr.length := sizeof( hdr ) + 9 + length( dbfull ) + sel.GetSize;
+  ms := TMemoryStream.Create;
+  hdr.requestID := 123456;
+  hdr.opcode := OP_DELETE;
+  ms.Write( hdr, sizeof( hdr ) );
+  flag := 0;
+  ms.Write( flag, sizeof( integer ) );
+  ms.Write( dbfull[1], length( dbfull ) );
+  ms.Write( nullterm, sizeof( char ) );
+  if IsSingle then flag := 1;
+  ms.Write( flag, sizeof( integer ) );
+  sel.WriteStream( ms );
+  ms.Seek( 0, soFromBeginning );
+  conn.Socket.SendStreamRaw( ms );
+  ms.Free;
+end;
+
 { TMongoConnection }
 
-constructor TMongoConnection.Create( host, port: string );
+constructor TMongoConnection.Create( host, port, db: string );
 begin
   FHost := host;
   FPort := port;
@@ -134,6 +206,7 @@ begin
     FSocket.Connect( FSocket.ResolveName( host ), port );
     FConnected := true;
     FSocket.SetTimeout( _timeout );
+    if length( db ) > 0 then GetDatabase( db );
   finally
   end;
 end;
@@ -154,7 +227,7 @@ begin
   Result.Name := collName;
 end;
 
-procedure TMongoConnection.SelectDatabase( db: string );
+procedure TMongoConnection.GetDatabase( db: string );
 begin
   self.FDB := db;
 end;
@@ -177,6 +250,16 @@ function TMongoCollection.find_one( query,
 begin
   mongo_query( FConnection, FDatabase, FCollection, 0, 1, query, fields );
   Result := TMongoCursor.Create( FConnection );
+end;
+
+procedure TMongoCollection.remove( sel: TBSONDocument; IsSingle: Boolean );
+begin
+  mongo_delete( FConnection, FDatabase, FCollection, sel, IsSingle );
+end;
+
+procedure TMongoCollection.save( doc: TBSONDocument );
+begin
+  mongo_insert( FConnection, FDatabase, FCollection, doc );
 end;
 
 { TMongoCursor }
