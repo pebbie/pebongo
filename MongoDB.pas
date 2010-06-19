@@ -152,6 +152,34 @@ begin
   ms.Free;
 end;
 
+procedure mongo_update( conn: TMongoConnection; db, collection: string; selector: TBSONDocument; newobj: TBSONDocument; IsUpsert: Boolean = False; IsMulti: Boolean = False );
+var
+  hdr               : TMongoMsgHeader;
+  dbfull            : string;
+  ms                : TMemoryStream;
+  opt               : integer;
+begin
+  if not conn.Connected then exit;
+  dbfull := format( '%s.%s', [db, collection] );
+  hdr.length := sizeof( hdr ) + 9 + length( dbfull ) + selector.GetSize + newobj.GetSize;
+  hdr.requestID := 123456;
+  hdr.opcode := OP_UPDATE;
+  ms := TMemoryStream.Create;
+  ms.Write( hdr, sizeof( hdr ) );
+  opt := 0;
+  ms.Write( opt, sizeof( opt ) );
+  ms.Write( dbfull[1], length( dbfull ) );
+  ms.Write( nullterm, sizeof( char ) );
+  if IsUpsert then opt := opt or 1;
+  if IsMulti then opt := opt or 2;
+  ms.Write( opt, sizeof( opt ) );
+  selector.WriteStream( ms );
+  newobj.WriteStream( ms );
+  ms.Seek( 0, soFromBeginning );
+  conn.Socket.SendStreamRaw( ms );
+  ms.Free;
+end;
+
 procedure mongo_message( conn: TMongoConnection; msg: string );
 var
   hdr               : TMongoMsgHeader;
@@ -258,8 +286,19 @@ begin
 end;
 
 procedure TMongoCollection.save( doc: TBSONDocument );
+var
+  sel               : TBSONDocument;
+  oid               : TBSONObjectIdItem;
 begin
-  mongo_insert( FConnection, FDatabase, FCollection, doc );
+  if not doc.HasItem( '_id' ) then
+    mongo_insert( FConnection, FDatabase, FCollection, doc )
+  else begin
+    sel := TBSONDocument.Create;
+    oid := TBSONObjectIDItem.Create;
+    oid.AsObjectID := doc.Values['_id'].AsObjectID;
+    sel.Values['_id'] := oid;
+    mongo_update( FConnection, FDatabase, FCollection, sel, doc, True );
+  end;
 end;
 
 { TMongoCursor }

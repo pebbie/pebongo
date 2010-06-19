@@ -86,6 +86,7 @@ type
     function ToString: string; virtual;
 
     function IsNull: boolean;
+    property AsObjectID: TBSONObjectID read ReadOID write WriteOID;
     property AsInteger: integer read ReadInteger write WriteInteger;
     property AsDouble: real read ReadDouble write WriteDouble;
     property AsInt64: int64 read ReadInt64 write WriteInt64;
@@ -116,6 +117,7 @@ type
     function GetSize: longint;
 
     function ToString: string;
+    function HasItem( itemname: string ): Boolean;
 
     property Items[idx: integer]: TBSONItem read GetItem;
     property Values[Name: string]: TBSONItem read GetValue write SetValue;
@@ -395,6 +397,19 @@ begin
   result := nullitem;
   i := IndexOf( name );
   if i <> -1 then Result := FItems[i];
+end;
+
+function TBSONDocument.HasItem( itemname: string ): Boolean;
+var
+  i                 : integer;
+begin
+  Result := False;
+  for i := 0 to high( FItems ) do begin
+    if FItems[i].elname = itemname then begin
+      Result := True;
+      break;
+    end;
+  end;
 end;
 
 function TBSONDocument.IndexOf( name: string ): integer;
