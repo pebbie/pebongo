@@ -288,15 +288,12 @@ end;
 procedure TMongoCollection.save( doc: TBSONDocument );
 var
   sel               : TBSONDocument;
-  oid               : TBSONObjectIdItem;
 begin
   if not doc.HasItem( '_id' ) then
     mongo_insert( FConnection, FDatabase, FCollection, doc )
   else begin
     sel := TBSONDocument.Create;
-    oid := TBSONObjectIDItem.Create;
-    oid.AsObjectID := doc.Values['_id'].AsObjectID;
-    sel.Values['_id'] := oid;
+    sel.Values['_id'] := doc.Values['_id'].Clone;
     mongo_update( FConnection, FDatabase, FCollection, sel, doc, True );
   end;
 end;
