@@ -330,6 +330,7 @@ begin
           end;
         end;
       end;
+      ms.Free;
     end;
 end;
 
