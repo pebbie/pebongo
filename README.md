@@ -1,25 +1,24 @@
-pebongo
-=======
+# pebongo
 
 the first mongodb driver for delphi/FPC
 
-[http://www.mongodb.org mongodb] driver for delphi and freepascal. [http://synapse.ararat.cz/ Synapse] (blocking TCP Socket) is used for compatibility with freepascal.
+[MongoDB](http://www.mongodb.org) driver for delphi and freepascal. [Synapse](http://synapse.ararat.cz/) (blocking TCP Socket) is used for compatibility with freepascal.
 
-===Current===
+### Current
   * JSON Parser
   * BSON I/O (*done*)
   * Wire Protocol Implementation (*in progress*)
 
-==TODO==
+## TODO
 _ordered by priority_
   * create test code and code examples (always)
-  # implement mongodb protocol (*in progress*)
-  # create tool to convert BSON-JSON and vice versa (*BSON->JSON ok*)
-  # create documentation (tutorial, reference)
-  # create db navigator app
+  * implement mongodb protocol (*in progress*)
+  * create tool to convert BSON-JSON and vice versa (*BSON->JSON ok*)
+  * create documentation (tutorial, reference)
+  * create db navigator app
 
-===Code Example===
-{{{
+### Code Example
+```
 //example #2 on bsonspec.org
 var
   bson              : TBSONDocument;
@@ -33,9 +32,9 @@ begin
   bson.Values['BSON'] := item;
   bson.SaveToFile( ExtractFilePath( Application.ExeName ) + 'hello.bson' );
   bson.Free;
-}}}
+```
 
-{{{
+```
 //preliminary driver interface
 var
   mongo             : TMongoConnection;
@@ -57,5 +56,4 @@ begin
   coll.Free;
   mongo.Free;
 end;
-}}}
-
+```
